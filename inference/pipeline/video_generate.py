@@ -261,8 +261,10 @@ class MagiEvaluator:
         conds: dict,
         offload,
         is_distill,
+        offload_block_num,
 
     ):
+        self.offload_block_num = offload_block_num
         self.is_distill=is_distill
         event_path_timer().reset()
         event_path_timer().synced_record("Step1: Prepare Latent Features")
@@ -445,7 +447,7 @@ class MagiEvaluator:
 
         # forward
         if offload:     
-            gpu_manager = BlockGPUManager(device="cuda",)
+            gpu_manager = BlockGPUManager(device="cuda", block_group_size=self.offload_block_num)
             if self.sr_model is not None:
                 gpu_manager.setup_for_inference(self.sr_model)
             else:
