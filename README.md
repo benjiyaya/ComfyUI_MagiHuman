@@ -28,6 +28,10 @@ ComfyUI_MagiHuman
 [DaVinci-MagiHuman](https://github.com/GAIR-NLP/daVinci-MagiHuman):Speed by Simplicity: A Single-Stream Architecture for Fast Audio-Video Generative Foundation Model
 
 
+Update
+----
+* add layer offload num to fit high vram 大显存 把offload开到你跑得动为止，小显存则从1开始测试，MagiCompiler库不用，但是改了麻烦，还是加了回来
+
 
 1.Installation  
 -----
@@ -40,6 +44,12 @@ git clone https://github.com/smthemex/ComfyUI_MagiHuman
 
 ```
 pip install -r requirements.txt
+
+#python312以下，注释掉MagiCompiler目录下的pyproject.toml的13行的requires-python = ">=3.12" 再安装
+git clone https://github.com/SandAI-org/MagiCompiler.git 
+cd MagiCompiler
+pip install -r requirements.txt
+pip install .
 ```
 
 3.checkpoints 
