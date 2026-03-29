@@ -32,7 +32,7 @@ def load_magihuman(dit_path,gguf_path,sr_dit_path,sr_gguf_path): # Load MAGIHuma
     return pipeline
 
 
-def infer_magihuman(pipeline,seed,conds,steps,sr_steps,sr_mode=False,offload=False):
+def infer_magihuman(pipeline,seed,conds,steps,sr_steps,sr_mode=False,offload=False,offload_block_num=1):
     optional_kwargs = {
     "seed": seed,
     "seconds": conds["seconds"],
@@ -48,7 +48,7 @@ def infer_magihuman(pipeline,seed,conds,steps,sr_steps,sr_mode=False,offload=Fal
     optional_kwargs = {k: v for k, v in optional_kwargs.items() if v is not None and v is not False}
    
     latent_video, latent_audio,params=pipeline.run_offline(
-        prompt=None, image=None, audio=None, save_path_prefix="save_path_prefix",conds=conds,sr_mode=sr_mode,steps=steps,sr_steps=sr_steps,offload=offload, **optional_kwargs
+        prompt=None, image=None, audio=None, save_path_prefix="save_path_prefix",conds=conds,sr_mode=sr_mode,steps=steps,sr_steps=sr_steps,offload=offload,offload_block_num=offload_block_num, **optional_kwargs
     )
     return latent_video, latent_audio,params
 
