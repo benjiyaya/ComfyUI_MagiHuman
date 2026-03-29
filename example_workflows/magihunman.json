@@ -1,7 +1,7 @@
 {
   "id": "6f5f68b4-396c-456c-9e91-40259353f153",
   "revision": 0,
-  "last_node_id": 18,
+  "last_node_id": 19,
   "last_link_id": 30,
   "nodes": [
     {
@@ -176,8 +176,7 @@
           "name": "vae",
           "type": "VAE",
           "links": [
-            8,
-            29
+            8
           ]
         }
       ],
@@ -187,103 +186,6 @@
       "widgets_values": [
         "Wan2.2_VAE.pth",
         "none"
-      ]
-    },
-    {
-      "id": 13,
-      "type": "MagiHuman_LATENTS",
-      "pos": [
-        20378.507805314817,
-        -663.2036798768751
-      ],
-      "size": [
-        270,
-        214
-      ],
-      "flags": {},
-      "order": 6,
-      "mode": 0,
-      "inputs": [
-        {
-          "name": "vae",
-          "shape": 7,
-          "type": "VAE",
-          "link": 29
-        },
-        {
-          "name": "audio_vae",
-          "shape": 7,
-          "type": "VAE",
-          "link": null
-        },
-        {
-          "name": "image",
-          "shape": 7,
-          "type": "IMAGE",
-          "link": 30
-        },
-        {
-          "name": "audio",
-          "shape": 7,
-          "type": "AUDIO",
-          "link": null
-        }
-      ],
-      "outputs": [
-        {
-          "name": "latent",
-          "type": "LATENT",
-          "links": [
-            14
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "MagiHuman_LATENTS"
-      },
-      "widgets_values": [
-        448,
-        256,
-        896,
-        512,
-        10
-      ]
-    },
-    {
-      "id": 16,
-      "type": "LoadImage",
-      "pos": [
-        20690.58028103153,
-        -1098.0642316852266
-      ],
-      "size": [
-        270,
-        314
-      ],
-      "flags": {},
-      "order": 1,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "IMAGE",
-          "type": "IMAGE",
-          "links": [
-            30
-          ]
-        },
-        {
-          "name": "MASK",
-          "type": "MASK",
-          "links": null
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "LoadImage"
-      },
-      "widgets_values": [
-        "u=3477957239,142631668&fm=3074&app=3074&f=JPEG.jpg",
-        "image"
       ]
     },
     {
@@ -298,7 +200,7 @@
         185.4526287832723
       ],
       "flags": {},
-      "order": 2,
+      "order": 1,
       "mode": 0,
       "inputs": [],
       "outputs": [],
@@ -321,7 +223,7 @@
         58
       ],
       "flags": {},
-      "order": 3,
+      "order": 2,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -405,7 +307,7 @@
         575.8542752314257
       ],
       "flags": {},
-      "order": 7,
+      "order": 6,
       "mode": 2,
       "inputs": [
         {
@@ -483,7 +385,7 @@
         130
       ],
       "flags": {},
-      "order": 4,
+      "order": 3,
       "mode": 0,
       "inputs": [],
       "outputs": [
@@ -507,6 +409,135 @@
       ]
     },
     {
+      "id": 3,
+      "type": "MagiHuman_SM_Clip",
+      "pos": [
+        19339.60210925152,
+        -601.9732657980383
+      ],
+      "size": [
+        302.45264064869116,
+        82
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "links": [
+            26
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MagiHuman_SM_Clip"
+      },
+      "widgets_values": [
+        "none",
+        "t5gemma-9b-9b-ul2-Q6_K.gguf"
+      ]
+    },
+    {
+      "id": 16,
+      "type": "LoadImage",
+      "pos": [
+        20650.709865652396,
+        -1147.2067947362734
+      ],
+      "size": [
+        270,
+        314
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            30
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoadImage"
+      },
+      "widgets_values": [
+        "ComfyUI_00006_.png",
+        "image"
+      ]
+    },
+    {
+      "id": 13,
+      "type": "MagiHuman_LATENTS",
+      "pos": [
+        20342.346277300898,
+        -692.874708057507
+      ],
+      "size": [
+        270,
+        214
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        },
+        {
+          "name": "audio_vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        },
+        {
+          "name": "image",
+          "shape": 7,
+          "type": "IMAGE",
+          "link": 30
+        },
+        {
+          "name": "audio",
+          "shape": 7,
+          "type": "AUDIO",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "latent",
+          "type": "LATENT",
+          "links": [
+            14
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MagiHuman_LATENTS"
+      },
+      "widgets_values": [
+        448,
+        256,
+        896,
+        512,
+        10
+      ]
+    },
+    {
       "id": 9,
       "type": "MagiHuman_SM_KSampler",
       "pos": [
@@ -515,7 +546,7 @@
       ],
       "size": [
         278.1060546875,
-        238
+        262
       ],
       "flags": {},
       "order": 9,
@@ -566,43 +597,12 @@
       },
       "widgets_values": [
         8,
-        987103737,
+        2078770938,
         "randomize",
         true,
+        3,
         true,
-        true
-      ]
-    },
-    {
-      "id": 3,
-      "type": "MagiHuman_SM_Clip",
-      "pos": [
-        19339.60210925152,
-        -601.9732657980383
-      ],
-      "size": [
-        302.45264064869116,
-        82
-      ],
-      "flags": {},
-      "order": 5,
-      "mode": 0,
-      "inputs": [],
-      "outputs": [
-        {
-          "name": "clip",
-          "type": "CLIP",
-          "links": [
-            26
-          ]
-        }
-      ],
-      "properties": {
-        "Node name for S&R": "MagiHuman_SM_Clip"
-      },
-      "widgets_values": [
-        "none",
-        "t5gemma-9b-9b-ul2-Q6_K.gguf"
+        false
       ]
     }
   ],
@@ -736,14 +736,6 @@
       "CONDITIONING"
     ],
     [
-      29,
-      2,
-      0,
-      13,
-      0,
-      "VAE"
-    ],
-    [
       30,
       16,
       0,
@@ -783,10 +775,10 @@
   "config": {},
   "extra": {
     "ds": {
-      "scale": 0.5357282704314386,
+      "scale": 0.7130543279442457,
       "offset": [
-        -18768.343453129437,
-        1654.3788017279555
+        -19527.36251168174,
+        1397.4607826581644
       ]
     },
     "frontendVersion": "1.42.8",
