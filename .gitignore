@@ -19,23 +19,17 @@ output
 *.log
 .idea
 *.pt
-*.png
-*.jpg
-*.jpeg
 *.gif
-*.mp3
-*.mp4
 *.pickle
 *.nsys-rep
 *.html
 *.mov
 *.safetensors
-*.json
+
 
 # Keep example and repo assets tracked.
 !example/assets/*.png
 !example/assets/*.mp4
-!example/**/*.json
 !assets/*.png
 !assets/*.jpg
 !assets/*.pdf
