@@ -7,7 +7,7 @@ from transformers import AutoTokenizer
 try :
     from transformers.models.t5gemma.modeling_t5gemma import T5GemmaEncoderModel,T5GemmaConfig
 except:
-    from transformers.models.t5gemma import T5GemmaEncoderModel
+    from transformers.models.t5gemma import T5GemmaEncoderModel,T5GemmaConfig
 from transformers import AutoModel, AutoTokenizer,AutoConfig
 from safetensors.torch import load_file
 from ...common import CPUOffloadWrapper, get_arch_memory
