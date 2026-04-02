@@ -28,52 +28,70 @@ ComfyUI_MagiHuman
 [DaVinci-MagiHuman](https://github.com/GAIR-NLP/daVinci-MagiHuman): Speed by Simplicity: A Single-Stream Architecture for Fast Audio-Video Generative Foundation Model
 
 
-Updates
+Updates (this fork)
 ----
 
-### [2026-04-03] Attention Mode Selection + Windows / SDPA Compatibility Fork (this edition)
+This README documents **our fork** of ComfyUI_MagiHuman. Upstream is [daVinci-MagiHuman](https://github.com/GAIR-NLP/daVinci-MagiHuman) / the original ComfyUI port. Below is everything we changed in code—**no model checkpoints were modified**.
 
-The upstream codebase hard-requires `flash-attn` (FlashAttention-2/3), which **does not build on Windows** and causes the following error at inference time:
+### 1. Attention backends (Windows-safe, selectable)
 
-```
-ModuleNotFoundError: No module named 'flash_attn.flash_attn_interface'
-```
+Upstream assumed **FlashAttention-2** was always importable, which fails on Windows (e.g. `ModuleNotFoundError: No module named 'flash_attn.flash_attn_interface'`).
 
-This fork adds a selectable **Attention Mode** dropdown to the `MagiHuman_SM_Model` node, replacing the hard `flash_attn` dependency with a four-way backend:
+| File / area | What we fixed |
+|---------------|----------------|
+| `inference/model/dit/dit_module.py` | **Fallback order:** FlashAttention-3 (Hopper) → FlashAttention-2 if import works → else **PyTorch SDPA** (`scaled_dot_product_attention`). **GQA:** repeat K/V heads to match Q. **Flex / local attention:** when FA2 is unavailable, `_flash_attn_with_correction` uses an explicit float32 **LSE + softmax** path compatible with the online merge. **Detection:** `_flash_attn2_usable()` uses a real import test so broken/partial installs fall back cleanly. |
+| `MagiHuman_node.py` | **`MagiHuman_SM_Model`** adds **`attn_mode`**: `auto` / `sage_attn` / `sdpa` / `flash_attn`. |
+| `load_utils.py` | **`load_model(..., attn_mode=...)`** calls `set_attention_mode()` from `dit_module` when the model loads. |
 
-| Mode | Backend | Notes |
-|------|---------|-------|
-| `auto` *(default)* | FA3 → FA2 → **SDPA** | Best available; safe on Windows |
-| `sage_attn` | **SageAttention** → SDPA fallback | Fastest on NVIDIA CUDA (pip install sageattention) |
-| `sdpa` | **PyTorch SDPA** | Always works; Windows, macOS, CPU |
-| `flash_attn` | FA3 / FA2 (forced) | Errors if flash-attn is not installed |
+| Mode | Behaviour |
+|------|-----------|
+| `auto` | FA3 (Hopper) → FA2 → SDPA |
+| `sage_attn` | [SageAttention](https://github.com/thu-ml/SageAttention) if installed, else SDPA |
+| `sdpa` | Always PyTorch SDPA |
+| `flash_attn` | Force FA2/FA3 (fails if not installed) |
 
-All paths handle **grouped-query attention (GQA)** automatically. The `flex_flash_attn` online-softmax merge path (`_flash_attn_with_correction`) routes through the same selection.
-
-**How to install SageAttention (optional, Linux/CUDA only):**
-```bash
-pip install sageattention
-```
-
-**No model weights are changed — this is a drop-in fix.**
+Optional: `pip install sageattention` (NVIDIA CUDA; not required on Windows if you use `sdpa` or `auto`).
 
 ---
 
-### [earlier] Layer Offload Configuration
+### 2. `MagiHuman_LATENTS` — ComfyUI audio input
 
-Added a configurable layer-offload count to accommodate different VRAM budgets.
-- **High VRAM**: increase the offload count until you find your limit.
-- **Low VRAM**: start from `1` and increase incrementally.
-- The `MagiCompiler` library is not strictly required for inference but is kept as a dependency to avoid refactoring overhead.
+Upstream **`load_audio_and_encode`** only called **`whisper.load_audio(path)`** (ffmpeg subprocess). ComfyUI passes **in-memory audio** as `{"waveform": Tensor, "sample_rate": int}`, which caused subprocess / `fsdecode` errors.
 
+| File | What we fixed |
+|------|----------------|
+| `inference/pipeline/video_process.py` | **Paths:** still use `whisper.load_audio`. **Dict:** `_comfy_audio_to_mono_numpy()` — batch 0, mono (mean channels if stereo), resample to **51200 Hz**, **clamp / peak-limit** to ~whisper-style **[-1, 1]** range before the VAE. |
+| `load_utils.py` | Unchanged API; `get_latents` passes Comfy audio through correctly. |
+
+---
+
+### 3. Audio VAE encode dtype and decode quality
+
+| Issue | Fix |
+|-------|-----|
+| **RuntimeError:** input float32 vs **bfloat16** bias in conv | After `torch.from_numpy`, tensors are cast to the **same device and dtype** as `audio_vae.vae_model` parameters before `encode`. |
+| **Stochastic VAE bottleneck** (Gaussian sample every encode → hiss) | **`VAEBottleneck.encode(..., deterministic=True)`** uses the **mean** latent only at inference. `SAAudioFeatureExtractor.encode(..., deterministic=True)` by default; **`load_audio_and_encode`** uses **`audio_vae.encode(..., deterministic=True)`** instead of calling `vae_model.encode` directly. |
+| **Playback resampling** | **`resample_waveform_to_playback()`** in `video_process.py`: prefers **`torchaudio.functional.resample`**, falls back to scipy. Uses **`AUDIO_ENCODE_SAMPLE_RATE` (51200)** → **`audio_vae.sample_rate`** (e.g. 44100) instead of a fragile hardcoded `441/512` ratio only. |
+| `load_utils.py` **`decoder_audio`** | Uses the new resampler and target rate from the loaded VAE. |
+| `inference/pipeline/video_generate.py` **`post_process`** | Same resampling helper when audio is decoded there. |
+
+---
+
+### 4. Layer offload (from upstream port)
+
+Configurable **layer offload** count on the sampler for different VRAM levels (raise until stable; low VRAM start at `1`). **MagiCompiler** remains listed for compatibility even when not strictly needed for inference.
+
+---
 
 1. Installation
 -----
 In the `./ComfyUI/custom_nodes` directory, run:
 
 ```bash
-git clone https://github.com/smthemex/ComfyUI_MagiHuman
+git clone https://github.com/benjiyaya/ComfyUI_MagiHuman
 ```
+
+Upstream / alternate: `https://github.com/smthemex/ComfyUI_MagiHuman`
 
 2. Requirements
 ----
