@@ -1,34 +1,4 @@
-![cover](assets/cover.png)
-
-
------
-
-<div align="center">
-
-# daVinci-MagiHuman
-
-### Speed by Simplicity: A Single-Stream Architecture for Fast Audio-Video Generative Foundation Model
-
-<p align="center">
-  <a href="https://plms.ai">SII-GAIR</a> &nbsp;&amp;&nbsp; <a href="https://sand.ai">Sand.ai</a>
-</p>
-
-[![arXiv](https://img.shields.io/badge/arXiv-2603.21986-b31b1b.svg)](https://arxiv.org/abs/2603.21986)
-[![Demo](https://img.shields.io/badge/%F0%9F%A4%97%20Demo-HuggingFace-orange)](https://huggingface.co/spaces/SII-GAIR/daVinci-MagiHuman)
-[![Models](https://img.shields.io/badge/%F0%9F%A4%97%20Models-HuggingFace-yellow)](https://huggingface.co/GAIR/daVinci-MagiHuman)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-2.9%2B-ee4c2c.svg)](https://pytorch.org/)
-
-</div>
-
-
-ComfyUI_MagiHuman
-----
-[DaVinci-MagiHuman](https://github.com/GAIR-NLP/daVinci-MagiHuman): Speed by Simplicity: A Single-Stream Architecture for Fast Audio-Video Generative Foundation Model
-
-
-Updates (this fork)
+Updates (this fork benjiyaya/ComfyUI_MagiHuman)
 ----
 
 This README documents **our fork** of ComfyUI_MagiHuman. Upstream is [daVinci-MagiHuman](https://github.com/GAIR-NLP/daVinci-MagiHuman) / the original ComfyUI port. Below is everything we changed in code—**no model checkpoints were modified**.
@@ -80,6 +50,39 @@ Upstream **`load_audio_and_encode`** only called **`whisper.load_audio(path)`** 
 ### 4. Layer offload (from upstream port)
 
 Configurable **layer offload** count on the sampler for different VRAM levels (raise until stable; low VRAM start at `1`). **MagiCompiler** remains listed for compatibility even when not strictly needed for inference.
+
+
+
+![cover](assets/cover.png)
+
+
+-----
+
+<div align="center">
+
+# daVinci-MagiHuman
+
+### Speed by Simplicity: A Single-Stream Architecture for Fast Audio-Video Generative Foundation Model
+
+<p align="center">
+  <a href="https://plms.ai">SII-GAIR</a> &nbsp;&amp;&nbsp; <a href="https://sand.ai">Sand.ai</a>
+</p>
+
+[![arXiv](https://img.shields.io/badge/arXiv-2603.21986-b31b1b.svg)](https://arxiv.org/abs/2603.21986)
+[![Demo](https://img.shields.io/badge/%F0%9F%A4%97%20Demo-HuggingFace-orange)](https://huggingface.co/spaces/SII-GAIR/daVinci-MagiHuman)
+[![Models](https://img.shields.io/badge/%F0%9F%A4%97%20Models-HuggingFace-yellow)](https://huggingface.co/GAIR/daVinci-MagiHuman)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Python](https://img.shields.io/badge/Python-3.12%2B-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.9%2B-ee4c2c.svg)](https://pytorch.org/)
+
+</div>
+
+
+ComfyUI_MagiHuman
+----
+[DaVinci-MagiHuman](https://github.com/GAIR-NLP/daVinci-MagiHuman): Speed by Simplicity: A Single-Stream Architecture for Fast Audio-Video Generative Foundation Model
+
+
 
 ---
 
