@@ -168,7 +168,8 @@ class SAAudioFeatureExtractor:
             waveform_out = self.vae_model.decode(latents)
         return waveform_out
 
-    def encode(self, waveform):
+    def encode(self, waveform, deterministic: bool = True):
+        """Encode waveform to latents. Use ``deterministic=True`` (default) at inference to avoid VAE sampling noise."""
         with torch.no_grad():
-            latents = self.vae_model.encode(waveform)
+            latents = self.vae_model.encode(waveform, deterministic=deterministic)
         return latents

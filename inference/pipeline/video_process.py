@@ -15,7 +15,7 @@
 import math
 import os
 import subprocess
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -26,6 +26,9 @@ from scipy.signal import resample
 from torch.nn import functional as F
 
 from ..utils import print_rank_0
+
+# Decoder in this pipeline assumes this many samples per second of waveform before resampling to ``audio_vae.sample_rate``.
+AUDIO_ENCODE_SAMPLE_RATE = 51200
 
 
 def merge_video_and_audio(video_path: str, audio_path: str, save_path: str):
@@ -133,6 +136,27 @@ def resample_audio_sinc(audio: torch.Tensor, time_stretching: float):
     return audio
 
 
+def resample_waveform_to_playback(audio_np: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
+    """
+    Resample decoded VAE waveform (time, channels) from model rate to playback rate.
+    Prefer torchaudio (sinc / polyphase); fall back to scipy FFT resample.
+    """
+    if src_sr == dst_sr or audio_np.shape[0] == 0:
+        return audio_np
+    try:
+        import torchaudio
+
+        t = torch.from_numpy(np.ascontiguousarray(audio_np, dtype=np.float32))
+        if t.dim() == 1:
+            t = t.unsqueeze(1)
+        t = t.transpose(0, 1)
+        t = torchaudio.functional.resample(t, src_sr, dst_sr)
+        return t.transpose(0, 1).contiguous().numpy()
+    except Exception:
+        new_len = max(1, int(round(audio_np.shape[0] * dst_sr / src_sr)))
+        return resample(audio_np.astype(np.float64), new_len).astype(np.float32)
+
+
 def merge_overlapping_vae_features(audio_feats, overlap_ratio=0.5):
     if not audio_feats:
         return None
@@ -165,31 +189,84 @@ def merge_overlapping_vae_features(audio_feats, overlap_ratio=0.5):
     return output_feat
 
 
-def load_audio_and_encode(audio_vae: any, audio_path: str, seconds: Optional[int] = None) -> torch.Tensor:
-    """Load and encode audio using the provided audio VAE."""
-    sample_rate = 51200
+def _comfy_audio_to_mono_numpy(audio: dict, target_sr: int) -> np.ndarray:
+    """
+    Convert ComfyUI AudioInput ({waveform: [B,C,T], sample_rate}) to mono float32 numpy
+    at target_sr (same role as whisper.load_audio(..., sr=target_sr)).
+    """
+    waveform = audio["waveform"]
+    in_sr = int(audio.get("sample_rate", 44100))
+
+    w = waveform.detach().cpu().float()
+    if w.dim() == 3:
+        w = w[0]
+    if w.dim() != 2:
+        raise ValueError(f"Expected waveform [B,C,T] or [C,T], got shape {tuple(w.shape)}")
+
+    if w.shape[0] == 1:
+        w = w[0]
+    else:
+        w = w.mean(dim=0)
+
+    arr = w.numpy().astype(np.float32, copy=False)
+    # Match whisper/ffmpeg-style float audio: roughly [-1, 1]. Avoid clipping/saturation in the VAE.
+    peak = float(np.max(np.abs(arr))) if arr.size else 0.0
+    if peak > 1.0:
+        arr = (arr / peak * 0.999).astype(np.float32)
+    else:
+        arr = np.clip(arr, -1.0, 1.0)
+    if in_sr != target_sr and len(arr) > 0:
+        new_len = max(1, int(round(len(arr) * target_sr / in_sr)))
+        arr = resample(arr.astype(np.float64), new_len).astype(np.float32)
+    return arr
+
+
+def load_audio_and_encode(
+    audio_vae: any,
+    audio_input: Union[str, os.PathLike, dict],
+    seconds: Optional[int] = None,
+) -> torch.Tensor:
+    """Load and encode audio using the provided audio VAE.
+
+    ``audio_input`` may be:
+    - A filesystem path (str / Path), loaded via ``whisper.load_audio`` (ffmpeg).
+    - A ComfyUI audio dict ``{"waveform": Tensor, "sample_rate": int}`` (in-memory; no ffmpeg).
+    """
+    sample_rate = AUDIO_ENCODE_SAMPLE_RATE
     audio_chunk_duration = 29
     overlap_ratio = 0.5
 
-    audio_full = whisper.load_audio(audio_path, sr=sample_rate)
+    if isinstance(audio_input, (str, os.PathLike)):
+        audio_full = whisper.load_audio(str(audio_input), sr=sample_rate)
+    elif isinstance(audio_input, dict) and "waveform" in audio_input:
+        audio_full = _comfy_audio_to_mono_numpy(audio_input, sample_rate)
+    else:
+        raise TypeError(
+            "audio must be a file path or ComfyUI audio dict with 'waveform' and 'sample_rate', "
+            f"got {type(audio_input)}"
+        )
     if seconds is not None:
         audio_full = audio_full[: min(int(seconds * sample_rate), audio_full.shape[0])]
     total_samples = audio_full.shape[0]
 
+    # Match encoder weights (e.g. bfloat16) — float32 input from numpy/whisper would error in conv1d.
+    p0 = next(audio_vae.vae_model.parameters())
+    enc_dev, enc_dtype = p0.device, p0.dtype
+
     window_size = int(audio_chunk_duration * sample_rate)
     step_size = int(window_size * (1 - overlap_ratio))
     if total_samples <= window_size:
-        audio = torch.from_numpy(audio_full).cuda()
+        audio = torch.from_numpy(audio_full).to(device=enc_dev, dtype=enc_dtype)
         audio = audio.unsqueeze(0).expand(2, -1)
-        return audio_vae.vae_model.encode(audio)
+        return audio_vae.encode(audio, deterministic=True)
 
     encoded_chunks = []
     latent_to_audio_ratio = None
     for offset_start in range(0, total_samples, step_size):
         offset_end = min(offset_start + window_size, total_samples)
         chunk = whisper.pad_or_trim(audio_full[offset_start:offset_end], length=window_size)
-        chunk_tensor = torch.from_numpy(chunk).cuda().unsqueeze(0).expand(2, -1)
-        encoded_chunk = audio_vae.vae_model.encode(chunk_tensor)
+        chunk_tensor = torch.from_numpy(chunk).to(device=enc_dev, dtype=enc_dtype).unsqueeze(0).expand(2, -1)
+        encoded_chunk = audio_vae.encode(chunk_tensor, deterministic=True)
 
         if latent_to_audio_ratio is None:
             latent_to_audio_ratio = encoded_chunk.shape[-1] / window_size

@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import importlib
+import math
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Callable, List, Optional, Tuple
@@ -542,17 +543,128 @@ def create_linear(
 HAS_MAGI_ATTENTION = importlib.util.find_spec("magi_attention") is not None
 HAS_FA3 = importlib.util.find_spec("flash_attn_interface") is not None
 
+# ------------------------------------------------------------------
+# Attention-mode selection
+# Allowed values: "auto" | "flash_attn" | "sage_attn" | "sdpa"
+#   auto       – FA3 (Hopper) → FA2 → SDPA
+#   flash_attn – force FA2/FA3 (errors if not installed)
+#   sage_attn  – SageAttention → SDPA fallback
+#   sdpa       – always PyTorch SDPA
+# ------------------------------------------------------------------
+ATTN_MODE: str = "auto"
+
+
+def set_attention_mode(mode: str) -> None:
+    """Change the attention backend used by all DiT attention ops."""
+    allowed = ("auto", "flash_attn", "sage_attn", "sdpa")
+    if mode not in allowed:
+        raise ValueError(f"attn_mode must be one of {allowed}, got '{mode}'")
+    global ATTN_MODE
+    ATTN_MODE = mode
+    print(f"[MagiHuman] Attention mode set to: {mode}")
+
+
+def _flash_attn2_usable() -> bool:
+    try:
+        import flash_attn.flash_attn_interface  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+def _sage_attn_usable() -> bool:
+    try:
+        from sageattention import sageattn  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
+
+
+HAS_FLASH_ATTN2 = _flash_attn2_usable()
+HAS_SAGE_ATTN = _sage_attn_usable()
+
+
+def _repeat_kv_for_gqa(
+    q: torch.Tensor, k: torch.Tensor, v: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """q, k, v: (B, S, H, D). Repeat k/v heads to match q for grouped-query attention."""
+    h_q, h_kv = q.shape[2], k.shape[2]
+    if h_q == h_kv:
+        return q, k, v
+    assert h_q % h_kv == 0, f"GQA expects num_heads_q % num_heads_kv == 0, got {h_q} and {h_kv}"
+    n_rep = h_q // h_kv
+    k = k.repeat_interleave(n_rep, dim=2)
+    v = v.repeat_interleave(n_rep, dim=2)
+    return q, k, v
+
+
+def _sdpa_flash_attn_func(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
+    """PyTorch SDPA, (B, S, H, D) input/output layout, GQA-safe."""
+    q, k, v = _repeat_kv_for_gqa(query, key, value)
+    q = q.transpose(1, 2)
+    k = k.transpose(1, 2)
+    v = v.transpose(1, 2)
+    out = torch.nn.functional.scaled_dot_product_attention(q, k, v, dropout_p=0.0, is_causal=False)
+    return out.transpose(1, 2)
+
+
+def _sage_flash_attn_func(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
+    """SageAttention, (B, S, H, D) input/output layout, GQA-safe via head-repeat."""
+    from sageattention import sageattn
+
+    q, k, v = _repeat_kv_for_gqa(query, key, value)
+    return sageattn(q, k, v, tensor_layout="NHD", is_causal=False)
+
+
+def _sdpa_flash_attn_func_return_lse(
+    query: torch.Tensor, key: torch.Tensor, value: torch.Tensor
+) -> Tuple[torch.Tensor, torch.Tensor, None]:
+    """
+    SDPA with explicit LSE for online-softmax merging in flex/local attention.
+    Returns (out, lse, None) matching flash_attn_func(..., return_attn_probs=True).
+    lse shape: (B, H, Sq).
+    """
+    q, k, v = _repeat_kv_for_gqa(query, key, value)
+    d = q.shape[-1]
+    scale = 1.0 / math.sqrt(d)
+    qh = q.transpose(1, 2).float()
+    kh = k.transpose(1, 2).float()
+    vh = v.transpose(1, 2)
+    scores = torch.matmul(qh, kh.transpose(-2, -1)) * scale
+    lse = torch.logsumexp(scores, dim=-1)
+    attn = torch.softmax(scores, dim=-1)
+    out = torch.matmul(attn, vh.float()).to(v.dtype).transpose(1, 2)
+    return out, lse, None
+
 
 @magi_register_custom_op(name="infra::flash_attn_func", is_subgraph_boundary=True)
 def flash_attn_func(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
+    if ATTN_MODE == "sdpa":
+        return _sdpa_flash_attn_func(query, key, value)
+
+    if ATTN_MODE == "sage_attn":
+        if HAS_SAGE_ATTN:
+            return _sage_flash_attn_func(query, key, value)
+        print("[MagiHuman] sageattention not found, falling back to SDPA.")
+        return _sdpa_flash_attn_func(query, key, value)
+
+    if ATTN_MODE == "flash_attn":
+        if HAS_FA3 and is_hopper_arch():
+            from flash_attn_interface import flash_attn_func as fa3_flash_attn_func
+            return fa3_flash_attn_func(query, key, value)
+        from flash_attn.flash_attn_interface import flash_attn_func as fa2_flash_attn_func
+        return fa2_flash_attn_func(query, key, value)
+
+    # ATTN_MODE == "auto": FA3 → FA2 → SDPA
     if HAS_FA3 and is_hopper_arch():
         from flash_attn_interface import flash_attn_func as fa3_flash_attn_func
-
         return fa3_flash_attn_func(query, key, value)
-    else:
+    if HAS_FLASH_ATTN2:
         from flash_attn.flash_attn_interface import flash_attn_func as fa2_flash_attn_func
-
         return fa2_flash_attn_func(query, key, value)
+    return _sdpa_flash_attn_func(query, key, value)
 
 
 def _split_q_range_with_no_overlap(
@@ -582,19 +694,27 @@ def _flash_attn_with_correction(
     output = torch.zeros_like(query)
     output_lse = torch.zeros((query.shape[0], query.shape[1]), dtype=torch.float32, device=query.device)
 
-    from flash_attn.flash_attn_interface import flash_attn_func
-
     for q_range, k_ranges in zip(q_ranges, k_range_list):
         q_start, q_end = q_range
         qo_out, qo_lse = None, None
         for k_range in k_ranges:
             k_start, k_end = k_range
-            cur_qo_out, cur_qo_lse, _ = flash_attn_func(
-                query[q_start:q_end].unsqueeze(0),
-                key[k_start:k_end].unsqueeze(0),
-                value[k_start:k_end].unsqueeze(0),
-                return_attn_probs=True,
-            )
+            q_blk = query[q_start:q_end].unsqueeze(0)
+            k_blk = key[k_start:k_end].unsqueeze(0)
+            v_blk = value[k_start:k_end].unsqueeze(0)
+            # For the LSE-returning path (flex/local attn merge), SDPA is always
+            # safe; sage_attn and flash_attn are used when explicitly available.
+            if ATTN_MODE == "flash_attn" or (ATTN_MODE == "auto" and HAS_FLASH_ATTN2):
+                from flash_attn.flash_attn_interface import flash_attn_func as fa2_flash_attn_func
+
+                cur_qo_out, cur_qo_lse, _ = fa2_flash_attn_func(
+                    q_blk,
+                    k_blk,
+                    v_blk,
+                    return_attn_probs=True,
+                )
+            else:
+                cur_qo_out, cur_qo_lse, _ = _sdpa_flash_attn_func_return_lse(q_blk, k_blk, v_blk)
             cur_qo_out, cur_qo_lse = cur_qo_out.squeeze(0), cur_qo_lse.squeeze(0)
 
             if qo_out is None:

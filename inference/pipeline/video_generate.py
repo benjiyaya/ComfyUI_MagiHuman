@@ -38,7 +38,12 @@ from ..utils import env_is_true, event_path_timer, print_mem_info_rank_0, print_
 from .prompt_process import get_padded_t5_gemma_embedding
 from .scheduler_unipc import FlowUniPCMultistepScheduler
 from .data_proxy import MagiDataProxy
-from .video_process import load_audio_and_encode, resample_audio_sinc, resizecrop
+from .video_process import (
+    AUDIO_ENCODE_SAMPLE_RATE,
+    load_audio_and_encode,
+    resample_waveform_to_playback,
+    resizecrop,
+)
 
 
 def schedule_latent_step(
@@ -549,7 +554,10 @@ class MagiEvaluator:
             latent_audio = latent_audio.squeeze(0)
             audio_output = self.audio_vae.decode(latent_audio.T)
             audio_output_np = audio_output.squeeze(0).T.cpu().numpy()
-            audio_output_np = resample_audio_sinc(audio_output_np, 441 / 512)
+            target_sr = int(getattr(self.audio_vae, "sample_rate", 44100))
+            audio_output_np = resample_waveform_to_playback(
+                audio_output_np, AUDIO_ENCODE_SAMPLE_RATE, target_sr
+            )
 
             return video_np, audio_output_np
         else:

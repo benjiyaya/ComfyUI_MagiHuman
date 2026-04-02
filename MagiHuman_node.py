@@ -8,8 +8,10 @@ import folder_paths
 from typing_extensions import override
 from comfy_api.latest import ComfyExtension, io
 import nodes
-from .load_utils import (load_model,load_vae,load_audio_vae,en_decoder_video,decoder_audio,
-                         load_clip,encoder_text,read_lat_emb,save_lat_emb,get_latents)
+from .load_utils import (load_model, load_vae, load_audio_vae, en_decoder_video, decoder_audio,
+                         load_clip, encoder_text, read_lat_emb, save_lat_emb, get_latents)
+
+ATTN_MODE_OPTIONS = ["auto", "sage_attn", "sdpa", "flash_attn"]
 from .model_loader_utils import clear_comfyui_cache
 from .inference.pipeline.entry import infer_magihuman
 
@@ -34,19 +36,20 @@ class MagiHuman_SM_Model(io.ComfyNode):
             display_name="MagiHuman_SM_Model",
             category="MagiHuman_SM",
             inputs=[
-                io.Combo.Input("dit",options= ["none"] + folder_paths.get_filename_list("diffusion_models") ),
-                io.Combo.Input("sr_dit",options= ["none"] + folder_paths.get_filename_list("diffusion_models") ),
-                io.Combo.Input("gguf",options= ["none"] + folder_paths.get_filename_list("gguf")),
-                io.Combo.Input("sr_gguf",options= ["none"] + folder_paths.get_filename_list("gguf")),
+                io.Combo.Input("dit", options=["none"] + folder_paths.get_filename_list("diffusion_models")),
+                io.Combo.Input("sr_dit", options=["none"] + folder_paths.get_filename_list("diffusion_models")),
+                io.Combo.Input("gguf", options=["none"] + folder_paths.get_filename_list("gguf")),
+                io.Combo.Input("sr_gguf", options=["none"] + folder_paths.get_filename_list("gguf")),
+                io.Combo.Input("attn_mode", options=ATTN_MODE_OPTIONS),
             ],
             outputs=[
                 io.Model.Output(display_name="model"),
                 ],
             )
     @classmethod
-    def execute(cls,dit,sr_dit,gguf,sr_gguf) -> io.NodeOutput:
+    def execute(cls, dit, sr_dit, gguf, sr_gguf, attn_mode) -> io.NodeOutput:
         clear_comfyui_cache()
-        model= load_model(dit,sr_dit,gguf,sr_gguf)
+        model = load_model(dit, sr_dit, gguf, sr_gguf, attn_mode=attn_mode)
         return io.NodeOutput(model)
 
 class MagiHuman_SM_VAE(io.ComfyNode):

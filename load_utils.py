@@ -11,19 +11,26 @@ from .inference.common import CPUOffloadWrapper, get_arch_memory
 from .inference.model.sa_audio import SAAudioFeatureExtractor
 from .model_loader_utils import nomarl_upscale
 from .inference.pipeline.entry import load_magihuman
+from .inference.model.dit.dit_module import set_attention_mode
 
-from .inference.pipeline.video_process import load_audio_and_encode, resample_audio_sinc, resizecrop
+from .inference.pipeline.video_process import (
+    AUDIO_ENCODE_SAMPLE_RATE,
+    load_audio_and_encode,
+    resample_waveform_to_playback,
+    resizecrop,
+)
 from .inference.pipeline.video_generate import encode_image_w,decode_video_w
 from .inference.pipeline.prompt_process import pad_or_trim
 from .inference.model.t5_gemma.t5_gemma_model import  get_t5_gemma_embedding,get_t5_gemma_encoder
 node_cr_path_ = os.path.dirname(os.path.abspath(__file__))
  
 
-def load_model( dit,sr_dit,gguf,sr_gguf):
+def load_model(dit, sr_dit, gguf, sr_gguf, attn_mode="auto"):
     dit_path=folder_paths.get_full_path("diffusion_models", dit) if dit != "none" else None
-    gguf_path=folder_paths.get_full_path("gguf", gguf) if gguf != "none" else None 
+    gguf_path=folder_paths.get_full_path("gguf", gguf) if gguf != "none" else None
     sr_dit_path=folder_paths.get_full_path("diffusion_models", sr_dit) if sr_dit != "none" else None
     sr_gguf_path=folder_paths.get_full_path("gguf", sr_gguf) if sr_gguf != "none" else None
+    set_attention_mode(attn_mode)
     model=load_magihuman(dit_path,gguf_path,sr_dit_path,sr_gguf_path)
     model.infer_mode="sr" if sr_gguf_path is not None or sr_dit_path is not None else "base"
     return model
@@ -119,7 +126,10 @@ def decoder_audio(audio_vae,audio_latents,device):
     latent_audio = latent_audio.squeeze(0)
     audio_output = audio_vae.decode(latent_audio.T)
     audio_output_np = audio_output.squeeze(0).T.cpu().float().numpy()
-    audio_output_np = resample_audio_sinc(audio_output_np, 441 / 512)
+    target_sr = int(getattr(audio_vae, "sample_rate", 44100))
+    audio_output_np = resample_waveform_to_playback(
+        audio_output_np, AUDIO_ENCODE_SAMPLE_RATE, target_sr
+    )
     torch.cuda.empty_cache()
     gc.collect()
     audio_output_np=torch.from_numpy(audio_output_np).to(device)

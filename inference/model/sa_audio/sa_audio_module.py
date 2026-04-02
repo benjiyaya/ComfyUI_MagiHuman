@@ -59,11 +59,17 @@ class VAEBottleneck(nn.Module):
     def __init__(self):
         super().__init__()
 
-    def encode(self, x, return_info=False, **kwargs):
+    def encode(self, x, return_info=False, deterministic: bool = False, **kwargs):
         info = {}
         mean, scale = x.chunk(2, dim=1)
-        x, kl = vae_sample(mean, scale)
-        info["kl"] = kl
+        # Inference: use the mean latent only (no Gaussian sampling) for cleaner audio.
+        # Training / stochastic path: deterministic=False matches the original vae_sample behaviour.
+        if deterministic:
+            x = mean
+            info["kl"] = torch.tensor(0.0, device=mean.device, dtype=mean.dtype)
+        else:
+            x, kl = vae_sample(mean, scale)
+            info["kl"] = kl
         if return_info:
             return x, info
         return x
@@ -367,13 +373,22 @@ class AudioAutoencoder(nn.Module):
         self.decoder = decoder
         self.soft_clip = soft_clip
 
-    def encode(self, audio, skip_bottleneck: bool = False, return_info: bool = False, **kwargs):
+    def encode(
+        self,
+        audio,
+        skip_bottleneck: bool = False,
+        return_info: bool = False,
+        deterministic: bool = False,
+        **kwargs,
+    ):
         info = {}
         latents = self.encoder(audio)
         info["pre_bottleneck_latents"] = latents
 
         if self.bottleneck is not None and not skip_bottleneck:
-            latents, bottleneck_info = self.bottleneck.encode(latents, return_info=True, **kwargs)
+            latents, bottleneck_info = self.bottleneck.encode(
+                latents, return_info=True, deterministic=deterministic, **kwargs
+            )
             info.update(bottleneck_info)
 
         if return_info:
